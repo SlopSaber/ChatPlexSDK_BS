@@ -30,7 +30,7 @@ namespace CP_SDK_BS.Game
         {
             get
             {
-                if (Levels.TryGetCustomRequirementsFor(Data.beatmapLevel, Data.beatmapKey.beatmapCharacteristic, Data.beatmapKey.difficulty, out var l_Reqs))
+                if (Levels.TryGetCustomRequirementsFor(Data.beatmapLevel, Data.beatmapKey.characteristic, Data.beatmapKey.difficulty, out var l_Reqs))
                     return l_Reqs.Count(x => x.ToLower() == "Noodle Extensions".ToLower()) != 0;
 
                 return false;
@@ -43,7 +43,7 @@ namespace CP_SDK_BS.Game
         {
             get
             {
-                if (Levels.TryGetCustomRequirementsFor(Data.beatmapLevel, Data.beatmapKey.beatmapCharacteristic, Data.beatmapKey.difficulty, out var l_Reqs))
+                if (Levels.TryGetCustomRequirementsFor(Data.beatmapLevel, Data.beatmapKey.characteristic, Data.beatmapKey.difficulty, out var l_Reqs))
                     return l_Reqs.Count(x => x.ToLower() == "Chroma".ToLower()) != 0;
 
                 return false;

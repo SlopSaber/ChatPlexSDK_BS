@@ -107,6 +107,7 @@ namespace CP_SDK_BS.UI
         ////////////////////////////////////////////////////////////////////////////
 
         public BeatmapCharacteristicSO  SelectedBeatmapCharacteristicSO = null;
+        public BeatmapCharacteristic    SelectedBeatmapCharacteristic   = default;
         public BeatmapDifficulty        SelectedBeatmapDifficulty       = BeatmapDifficulty.Easy;
 
         public event Action<BeatmapKey> OnActiveDifficultyChanged;
@@ -399,6 +400,7 @@ namespace CP_SDK_BS.UI
             m_Characteristic = null;
 
             SelectedBeatmapCharacteristicSO = null;
+            SelectedBeatmapCharacteristic = default;
             SelectedBeatmapDifficulty = BeatmapDifficulty.Easy;
 
             Name = "--";
@@ -472,7 +474,11 @@ namespace CP_SDK_BS.UI
             /// Display modes
             var l_Characteristics = new List<HMUI.IconSegmentedControl.DataItem>();
             foreach (var l_Current in p_BeatMap.GetCharacteristics().Distinct())
-                l_Characteristics.Add(new HMUI.IconSegmentedControl.DataItem(l_Current.icon, BGLib.Polyglot.Localization.Get(l_Current.descriptionLocalizationKey)));
+            {
+                l_Characteristics.Add(new HMUI.IconSegmentedControl.DataItem(
+                    Game.Levels.GetBeatmapCharacteristicIcon(l_Current),
+                    BGLib.Polyglot.Localization.Get(l_Current.HintLocalizationKey())));
+            }
 
             if (l_Characteristics.Count == 0)
             {
@@ -772,13 +778,13 @@ namespace CP_SDK_BS.UI
                 if (index > characs.Count())
                     return;
 
-                SelectedBeatmapCharacteristicSO = characs.ElementAt(index);
+                SelectedBeatmapCharacteristic = characs.ElementAt(index);
 
                 List<string> l_Difficulties =
                     m_LimitedBeatmapDifficulty == null
                     ?
                         m_LocalBeatMap.GetBeatmapKeys()
-                            .Where(x => x.beatmapCharacteristic == SelectedBeatmapCharacteristicSO)
+                            .Where(x => x.characteristic == SelectedBeatmapCharacteristic)
                             .Select(x => Game.Levels.BeatmapDifficultySerializedNameToDifficultyName(x.difficulty.SerializedName())).ToList()
                     :
                         new List<string>()
@@ -829,10 +835,10 @@ namespace CP_SDK_BS.UI
                     m_LimitedBeatmapDifficulty == null
                     ? 
                         m_LocalBeatMap.GetBeatmapKeys()
-                            .Where(x => x.beatmapCharacteristic == SelectedBeatmapCharacteristicSO)
+                            .Where(x => x.characteristic == SelectedBeatmapCharacteristic)
                     :
                         m_LocalBeatMap.GetBeatmapKeys()
-                            .Where(x => x.beatmapCharacteristic == SelectedBeatmapCharacteristicSO && x.difficulty == m_LimitedBeatmapDifficulty);
+                            .Where(x => x.characteristic == SelectedBeatmapCharacteristic && x.difficulty == m_LimitedBeatmapDifficulty);
 
                 if (p_Index < 0 || p_Index >= l_Difficulties.Count())
                 {
@@ -847,7 +853,7 @@ namespace CP_SDK_BS.UI
                 }
 
                 var l_BeatmapKey        = l_Difficulties.ElementAt(p_Index);
-                var l_DifficultyBeatmap = m_LocalBeatMap.GetDifficultyBeatmapData(l_BeatmapKey.beatmapCharacteristic, l_BeatmapKey.difficulty);
+                var l_DifficultyBeatmap = m_LocalBeatMap.GetDifficultyBeatmapData(l_BeatmapKey.characteristic, l_BeatmapKey.difficulty);
 
                 Time            = m_LocalBeatMap.songDuration;
                 NPS             = ((float)l_DifficultyBeatmap.notesCount / (float)m_LocalBeatMap.songDuration);
@@ -919,7 +925,7 @@ namespace CP_SDK_BS.UI
                 Bombs       = l_SelectedBeatmapCharacteristicDifficulty.bombs;
 
                 if (OnActiveDifficultyChanged != null && Game.Levels.TryGetLevelIDFromHash(l_Version.hash, out var l_LevelID))
-                    OnActiveDifficultyChanged.Invoke(new BeatmapKey(l_LevelID, SelectedBeatmapCharacteristicSO, SelectedBeatmapDifficulty));
+                    OnActiveDifficultyChanged.Invoke(new BeatmapKey(l_LevelID, SelectedBeatmapCharacteristicSO.AsEnum(), SelectedBeatmapDifficulty));
             }
         }
         /// <summary>

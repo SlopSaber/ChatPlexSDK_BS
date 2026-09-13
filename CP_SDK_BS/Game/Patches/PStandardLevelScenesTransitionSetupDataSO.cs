@@ -5,9 +5,9 @@ namespace CP_SDK_BS.Game.Patches
     /// <summary>
     /// Level data finder
     /// </summary>
-    [HarmonyPatch(typeof(MenuTransitionsHelper))]
-    [HarmonyPatch(nameof(MenuTransitionsHelper.StartStandardLevel))]
-    public class PStandardLevelScenesTransitionSetupDataSO : StandardLevelScenesTransitionSetupDataSO
+    [HarmonyPatch(typeof(StandardLevelScenesTransitionSetupDataSO))]
+    [HarmonyPatch(nameof(StandardLevelScenesTransitionSetupDataSO.Init))]
+    public class PStandardLevelScenesTransitionSetupDataSO
     {
         /// <summary>
         /// Level data cache
@@ -20,18 +20,18 @@ namespace CP_SDK_BS.Game.Patches
         /// <summary>
         /// Postfix
         /// </summary>
-        internal static void Postfix(ref MenuTransitionsHelper __instance)
+        internal static void Postfix(StandardLevelScenesTransitionSetupDataSO __instance)
         {
             m_LevelData = new LevelData()
             {
                 Type = LevelType.Solo,
-                Data = __instance.standardLevelScenesTransitionSetupData.gameplayCoreSceneSetupData
+                Data = __instance.gameplayCoreSceneSetupData
             };
 
             Logic.FireLevelStarted(m_LevelData);
 
-            __instance.standardLevelScenesTransitionSetupData.didFinishEvent -= OnDidFinishEvent;
-            __instance.standardLevelScenesTransitionSetupData.didFinishEvent += OnDidFinishEvent;
+            __instance.didFinishEvent -= OnDidFinishEvent;
+            __instance.didFinishEvent += OnDidFinishEvent;
         }
 
         ////////////////////////////////////////////////////////////////////////////

@@ -168,8 +168,10 @@ namespace CP_SDK_BS.Game
 
             if (m_BeatmapCharacteristicCollection == null)
             {
-                var l_CustomLevelLoader = Resources.FindObjectsOfTypeAll<CustomLevelLoader>().FirstOrDefault();
-                m_BeatmapCharacteristicCollection = l_CustomLevelLoader?._beatmapCharacteristicCollection;
+                var l_CollectionSO = Resources.FindObjectsOfTypeAll<BeatmapCharacteristicCollectionSO>().FirstOrDefault();
+                var l_AppSettings = Resources.FindObjectsOfTypeAll<AppStaticSettingsSO>().FirstOrDefault();
+                if (l_CollectionSO != null && l_AppSettings != null)
+                    m_BeatmapCharacteristicCollection = new BeatmapCharacteristicCollection(l_CollectionSO, l_AppSettings);
             }
 
             if (m_BeatmapCharacteristicCollection == null)
@@ -184,6 +186,13 @@ namespace CP_SDK_BS.Game
                 p_BeatmapCharacteristicSO = l_Result;
 
             return l_Result != null;
+        }
+
+        public static Sprite GetBeatmapCharacteristicIcon(BeatmapCharacteristic p_Characteristic)
+        {
+            if (m_BeatmapCharacteristicCollection == null)
+                TryGetBeatmapCharacteristicSOBySerializedName(p_Characteristic.SerializedName(), out _);
+            return m_BeatmapCharacteristicCollection?.GetBeatmapCharacteristicIcon(p_Characteristic);
         }
         /// <summary>
         /// Sanitize BeatmapCharacteristicSO serialized name
@@ -397,12 +406,12 @@ namespace CP_SDK_BS.Game
         /// <param name="p_BeatmapCharacteristicSO">Desired BeatmapCharacteristicSO</param>
         /// <param name="p_BeatmapDifficulty">Desired BeatmapDifficulty</param>
         /// <returns>True or false</returns>
-        public static bool BeatmapLevel_HasDifficulty(BeatmapLevel p_BeatmapLevel, BeatmapCharacteristicSO p_BeatmapCharacteristicSO, BeatmapDifficulty p_BeatmapDifficulty)
+        public static bool BeatmapLevel_HasDifficulty(BeatmapLevel p_BeatmapLevel, BeatmapCharacteristic p_BeatmapCharacteristic, BeatmapDifficulty p_BeatmapDifficulty)
         {
-            if (p_BeatmapLevel == null || p_BeatmapCharacteristicSO == null)
+            if (p_BeatmapLevel == null)
                 return false;
 
-            return p_BeatmapLevel.GetDifficultyBeatmapData(p_BeatmapCharacteristicSO, p_BeatmapDifficulty) != null;
+            return p_BeatmapLevel.GetDifficultyBeatmapData(p_BeatmapCharacteristic, p_BeatmapDifficulty) != null;
         }
         /// <summary>
         /// Try get a beatmap key from a BeatmapLevel
@@ -412,15 +421,15 @@ namespace CP_SDK_BS.Game
         /// <param name="p_BeatmapDifficulty">Desired BeatmapDifficulty</param>
         /// <param name="p_BeatmapKey">Out beatmap key</param>
         /// <returns>True or false</returns>
-        public static bool BeatmapLevel_TryGetBeatmapKey(BeatmapLevel p_BeatmapLevel, BeatmapCharacteristicSO p_BeatmapCharacteristicSO, BeatmapDifficulty p_BeatmapDifficulty, out BeatmapKey p_BeatmapKey)
+        public static bool BeatmapLevel_TryGetBeatmapKey(BeatmapLevel p_BeatmapLevel, BeatmapCharacteristic p_BeatmapCharacteristic, BeatmapDifficulty p_BeatmapDifficulty, out BeatmapKey p_BeatmapKey)
         {
             p_BeatmapKey = default;
-            if (p_BeatmapLevel == null || p_BeatmapCharacteristicSO == null)
+            if (p_BeatmapLevel == null)
                 return false;
 
             foreach (var l_BeatmapKey in p_BeatmapLevel.GetBeatmapKeys())
             {
-                if (l_BeatmapKey.beatmapCharacteristic.serializedName != p_BeatmapCharacteristicSO.serializedName)
+                if (l_BeatmapKey.characteristic != p_BeatmapCharacteristic)
                     continue;
                 if (l_BeatmapKey.difficulty != p_BeatmapDifficulty)
                     continue;
@@ -440,12 +449,12 @@ namespace CP_SDK_BS.Game
         /// <param name="p_CustomRequirements">OUT custom requirements</param>
         /// <returns>true or false</returns>
         public static bool TryGetCustomRequirementsFor( BeatmapLevel            p_BeatmapLevel,
-                                                        BeatmapCharacteristicSO p_BeatmapCharacteristicSO,
+                                                        BeatmapCharacteristic     p_BeatmapCharacteristic,
                                                         BeatmapDifficulty       p_BeatmapDifficulty,
                                                         out List<string>        p_CustomRequirements)
         {
             p_CustomRequirements = null;
-            if (p_BeatmapLevel == null || p_BeatmapCharacteristicSO == null)
+            if (p_BeatmapLevel == null)
                 return false;
 
             if (!LevelID_IsCustom(p_BeatmapLevel.levelID)
@@ -459,11 +468,7 @@ namespace CP_SDK_BS.Game
             var l_CustomData = l_SongData._difficulties.FirstOrDefault((x) =>
             {
                 return x._difficulty == p_BeatmapDifficulty
-                        && (
-                                x._beatmapCharacteristicName == p_BeatmapCharacteristicSO.characteristicNameLocalizationKey
-                            ||
-                                x._beatmapCharacteristicName == p_BeatmapCharacteristicSO.serializedName
-                            );
+                        && x._beatmapCharacteristicName == p_BeatmapCharacteristic.SerializedName();
             });
 
             if (l_CustomData == null)
@@ -561,7 +566,7 @@ namespace CP_SDK_BS.Game
         /// <param name="songFinishedCallback">Callback when the song is finished</param>
         /// <param name="menuButtonText">Menu button text</param>
         public static void StartBeatmapLevel(BeatmapLevel                            level,
-                                             BeatmapCharacteristicSO                 characteristic,
+                                             BeatmapCharacteristic                   characteristic,
                                              BeatmapDifficulty                       difficulty,
                                              IBeatmapLevelData                       beatmapLevelData,
                                              OverrideEnvironmentSettings             overrideEnvironmentSettings                                   = null,
@@ -575,19 +580,19 @@ namespace CP_SDK_BS.Game
             if (level == null)
                 return;
 
-            if (!m_MenuTransitionsHelper)
-                m_MenuTransitionsHelper = Resources.FindObjectsOfTypeAll<MenuTransitionsHelper>().First();
+            if (m_MenuTransitionsHelper == null)
+                m_MenuTransitionsHelper = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault()?._menuTransitionsHelper;
 
             if (!m_SimpleLevelStarter)
                 m_SimpleLevelStarter = Resources.FindObjectsOfTypeAll<SimpleLevelStarter>().FirstOrDefault();
 
-            if (m_MenuTransitionsHelper && m_SimpleLevelStarter)
+            if (m_MenuTransitionsHelper != null && m_SimpleLevelStarter != null)
             {
                 try
                 {
                     Scoring.BeatLeader_ManualWarmUpSubmission();
 
-                    var l_BeatmapKey = level.GetBeatmapKeys().FirstOrDefault(x => x.beatmapCharacteristic == characteristic && x.difficulty == difficulty);
+                    var l_BeatmapKey = level.GetBeatmapKeys().FirstOrDefault(x => x.characteristic == characteristic && x.difficulty == difficulty);
                     var gameplayAdditionInfo = new GameplayAdditionalInformation(
                         backButtonText: menuButtonText
                     );
@@ -608,8 +613,7 @@ namespace CP_SDK_BS.Game
                         afterSceneSwitchToGameplayCallback:     null,
                         levelFinishedCallback:                  songFinishedCallback,
                         levelRestartedCallback:                 null,
-                        beatmapLevelData:                       null,
-                        recordingToolData:                      null
+                        beatmapLevelData:                       null
                     );
                 }
                 catch (Exception l_Exception)
@@ -635,8 +639,8 @@ namespace CP_SDK_BS.Game
             if (m_BeatmapLevelsModel == null)
                 m_BeatmapLevelsModel = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault(x => x._beatmapLevelsModel != null)?._beatmapLevelsModel;
 
-            if (!m_MenuTransitionsHelper)
-                m_MenuTransitionsHelper = Resources.FindObjectsOfTypeAll<MenuTransitionsHelper>().First();
+            if (m_MenuTransitionsHelper == null)
+                m_MenuTransitionsHelper = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault()?._menuTransitionsHelper;
 
             if (m_BeatmapLevelsModel != null)
             {
@@ -693,12 +697,12 @@ namespace CP_SDK_BS.Game
         /// <param name="p_HaveAnyScore">Have any score set</param>
         /// <param name="p_HaveAllScores">Have all scores set</param>
         /// <returns>Scores</returns>
-        public static Dictionary<BeatmapCharacteristicSO, List<(BeatmapDifficulty, int)>> GetScoresByLevelID(string p_LevelID, out bool p_HaveAnyScore, out bool p_HaveAllScores)
+        public static Dictionary<BeatmapCharacteristic, List<(BeatmapDifficulty, int)>> GetScoresByLevelID(string p_LevelID, out bool p_HaveAnyScore, out bool p_HaveAllScores)
         {
             p_HaveAnyScore  = false;
             p_HaveAllScores = true;
 
-            var l_Results = new Dictionary<BeatmapCharacteristicSO, List<(BeatmapDifficulty, int)>>();
+            var l_Results = new Dictionary<BeatmapCharacteristic, List<(BeatmapDifficulty, int)>>();
             if (m_PlayerDataModel == null || !m_PlayerDataModel)
             {
                 m_PlayerDataModel = Resources.FindObjectsOfTypeAll<PlayerDataModel>().FirstOrDefault();
@@ -721,18 +725,18 @@ namespace CP_SDK_BS.Game
             var l_LevelStatsData    = l_PlayerData?.levelsStatsData;
             foreach (var l_BeatmapKey in l_BeatmapLevel.GetBeatmapKeys())
             {
-                if (!l_Results.ContainsKey(l_BeatmapKey.beatmapCharacteristic))
-                    l_Results.Add(l_BeatmapKey.beatmapCharacteristic, new List<(BeatmapDifficulty, int)>());
+                if (!l_Results.ContainsKey(l_BeatmapKey.characteristic))
+                    l_Results.Add(l_BeatmapKey.characteristic, new List<(BeatmapDifficulty, int)>());
 
                 if (l_LevelStatsData.TryGetValue(l_BeatmapKey, out var l_PlayerLevelStatsData) && l_PlayerLevelStatsData.playCount > 0)
                 {
                     p_HaveAnyScore = true;
-                    l_Results[l_BeatmapKey.beatmapCharacteristic].Add((l_BeatmapKey.difficulty, l_PlayerLevelStatsData.highScore));
+                    l_Results[l_BeatmapKey.characteristic].Add((l_BeatmapKey.difficulty, l_PlayerLevelStatsData.highScore));
                 }
                 else
                 {
                     p_HaveAllScores = false;
-                    l_Results[l_BeatmapKey.beatmapCharacteristic].Add((l_BeatmapKey.difficulty, -1));
+                    l_Results[l_BeatmapKey.characteristic].Add((l_BeatmapKey.difficulty, -1));
                 }
             }
 

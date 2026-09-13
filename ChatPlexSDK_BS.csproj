@@ -9,6 +9,7 @@
         <Copyright>Copyright © HardCPP 2026</Copyright>
         <TargetCulture>en</TargetCulture>
         <TargetFramework>net472</TargetFramework>
+        <LangVersion>latest</LangVersion>
         <AppOutputBase>$(MSBuildProjectDirectory)\</AppOutputBase>
 
         <EnableFrameworkPathOverride>true</EnableFrameworkPathOverride>
@@ -32,7 +33,7 @@
         <WarningLevel>4</WarningLevel>
     </PropertyGroup>
     
-    <ItemGroup>
+  <ItemGroup>
         <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.2">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

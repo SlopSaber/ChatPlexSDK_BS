@@ -228,7 +228,7 @@ namespace CP_SDK_BS.UI.Data
                 {
                     foreach (var l_Row in l_Scores)
                     {
-                        l_Tooltip += $"\n{l_Row.Key.serializedName} ";
+                        l_Tooltip += $"\n{l_Row.Key.SerializedName()} ";
                         foreach (var l_SubRow in l_Row.Value)
                             l_Tooltip += (l_SubRow.Item2 != -1 ? "<color=green>✔</color> " : "<color=red>❌</color> ");
                     }

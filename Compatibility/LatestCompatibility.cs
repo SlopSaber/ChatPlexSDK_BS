@@ -1,0 +1,4 @@
+global using ScenesTransitionSetupDataSO = ScenesTransitionSetupData;
+global using StandardLevelScenesTransitionSetupDataSO = StandardLevelScenesTransitionSetupData;
+global using MultiplayerLevelScenesTransitionSetupDataSO = MultiplayerLevelScenesTransitionSetupData;
+global using MissionLevelScenesTransitionSetupDataSO = MissionLevelScenesTransitionSetupData;
