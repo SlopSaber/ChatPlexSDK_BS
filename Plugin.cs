@@ -3,6 +3,7 @@ using HarmonyLib;
 using IPA;
 using IPA.Utilities;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -138,7 +139,28 @@ namespace ChatPlexSDK_BS
         /// </summary>
         private void Logic_OnMenuSceneLoaded()
         {
-            MenuButtons.Instance.RegisterButton(new MenuButton("BeatSaber+", "Feel good!", OnModButtonPressed, true));
+            CP_SDK.Unity.MTCoroutineStarter.Start(RegisterMenuButtonCoroutine());
+        }
+
+        private IEnumerator RegisterMenuButtonCoroutine()
+        {
+            for (var i = 0; i < 120; i++)
+            {
+                try
+                {
+                    if (MenuButtons.Instance != null)
+                    {
+                        MenuButtons.Instance.RegisterButton(new MenuButton("BeatSaber+", "Feel good!", OnModButtonPressed, true));
+                        yield break;
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // BSML creates its singleton after the scene-loaded callback.
+                }
+
+                yield return null;
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////
