@@ -530,7 +530,7 @@ namespace CP_SDK_BS.Game
             await Task.Yield();
 
             var l_LevelID = SanitizeLevelID(p_LevelID);
-            if (!TryGetBeatmapLevelForLevelID(l_LevelID, out var l_BeatmapLevel))
+            if (!TryGetBeatmapLevelForLevelID(l_LevelID, out var l_BeatmapLevel, silentFail: true))
             {
                 p_LoadCallback(null, null);
                 return;
@@ -715,7 +715,7 @@ namespace CP_SDK_BS.Game
             }
 
             var l_LevelID = SanitizeLevelID(p_LevelID);
-            if (!TryGetBeatmapLevelForLevelID(l_LevelID, out var l_BeatmapLevel))
+            if (!TryGetBeatmapLevelForLevelID(l_LevelID, out var l_BeatmapLevel, silentFail: true))
             {
                 p_HaveAllScores = false;
                 return l_Results;
