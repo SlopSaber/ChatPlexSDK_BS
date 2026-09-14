@@ -218,7 +218,7 @@ namespace CP_SDK_BS.UI.Data
 
             if ((BeatSaver_Map != null && !BeatSaver_Map.Partial) || BeatmapLevel != null)
             {
-                var l_HaveSong  = Game.Levels.TryGetBeatmapLevelForLevelID(GetLevelID(), out _);
+                var l_HaveSong  = Game.Levels.TryGetBeatmapLevelForLevelID(GetLevelID(), out _, silentFail: true);
                 var l_Scores    = Game.Levels.GetScoresByLevelID(GetLevelID(), out var l_HaveAnyScore, out var l_HaveAllScores);
 
                 var l_Duration      = GetSongDuration();
@@ -305,7 +305,7 @@ namespace CP_SDK_BS.UI.Data
             if (m_SongPreviewPlayer == null || !m_SongPreviewPlayer || !l_PlayPreviewAudio)
                 return;
 
-            if (Game.Levels.TryGetBeatmapLevelForLevelID(GetLevelID(), out var l_LocalSong))
+            if (Game.Levels.TryGetBeatmapLevelForLevelID(GetLevelID(), out var l_LocalSong, silentFail: true))
             {
                 if (m_AudioClipCache.TryGetValue(GetLevelHash(), out var l_AudioClip))
                 {
@@ -367,7 +367,7 @@ namespace CP_SDK_BS.UI.Data
                 m_CoverCache.Remove(GetLevelHash());
             }
 
-            if (Game.Levels.TryGetBeatmapLevelForLevelID(GetLevelID(), out var l_LocalSong))
+            if (Game.Levels.TryGetBeatmapLevelForLevelID(GetLevelID(), out var l_LocalSong, silentFail: true))
             {
                 Game.Levels.TryLoadBeatmapLevelCoverAsync(l_LocalSong, (_, p_Sprite) => CoverLoaded(p_Sprite));
             }
