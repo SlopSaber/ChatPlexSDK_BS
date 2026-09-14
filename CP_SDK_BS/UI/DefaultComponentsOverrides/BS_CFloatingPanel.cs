@@ -65,8 +65,7 @@ namespace CP_SDK_BS.UI.DefaultComponentsOverrides
                     if (!l_VRPointer.GetComponent<Subs.SubFloatingPanelMover>())
                         l_VRPointer.gameObject.AddComponent<Subs.SubFloatingPanelMover>();
                 }
-                else
-                    CP_SDK.ChatPlexSDK.Logger.Warning("[CP_SDK_BS.UI.DefaultComponentsOverrides][BS_CFloatingPanel.SetAllowMovement] Failed to get VRPointer!");
+                // The pointer can be created after the panel. CreateMover is retried from OnActivated.
             }
 
             return this;
@@ -126,10 +125,7 @@ namespace CP_SDK_BS.UI.DefaultComponentsOverrides
                 p_VRPointer = Resources.FindObjectsOfTypeAll<VRPointer>().FirstOrDefault();
 
             if (p_VRPointer == null)
-            {
-                CP_SDK.ChatPlexSDK.Logger.Warning("[CP_SDK_BS.UI.DefaultComponentsOverrides][BS_CFloatingPanel.CreateMover] Failed to get VRPointer!");
                 return;
-            }
 
             if (!p_VRPointer.GetComponent<Subs.SubFloatingPanelMover>())
                 p_VRPointer.gameObject.AddComponent<Subs.SubFloatingPanelMover>();
