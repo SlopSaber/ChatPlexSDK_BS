@@ -457,9 +457,7 @@ namespace CP_SDK_BS.UI.Data
             if (m_LoadAudioToken.IsCancelled(l_StartSerial))
                 yield break;
 
-            if (l_Loader.isNetworkError
-                || l_Loader.isHttpError
-                || !string.IsNullOrEmpty(l_Loader.error))
+            if (l_Loader.result != UnityWebRequest.Result.Success)
             {
                 CP_SDK.ChatPlexSDK.Logger.Error($"[CP_SDK_BS.UI.Data][SongListItem.Coroutine_GetAudioAsync] Can't load audio! {(!string.IsNullOrEmpty(l_Loader.error) ? l_Loader.error : string.Empty)}");
                 yield break;
