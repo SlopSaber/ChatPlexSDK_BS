@@ -50,7 +50,9 @@ namespace ChatPlexSDK_BS
                 new CP_SDK.Logging.IPALogger(p_Logger),
                 "BeatSaber",
                 "./",
-                CP_SDK.ERenderPipeline.BuiltIn
+                (QualitySettings.renderPipeline ?? UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline) != null
+                    ? CP_SDK.ERenderPipeline.URP
+                    : CP_SDK.ERenderPipeline.BuiltIn
             );
             CP_SDK.ChatPlexSDK.OnAssemblyLoaded();
 
@@ -69,6 +71,12 @@ namespace ChatPlexSDK_BS
 
                 return p_Input;
             });
+
+            if (CP_SDK.ChatPlexSDK.RenderPipeline == CP_SDK.ERenderPipeline.URP)
+            {
+                CP_SDK.Unity.EnhancedImageParticleMaterialProvider.MaterialFactory = () => CreateEmoteMaterial(false);
+                CP_SDK.Unity.EnhancedImageParticleMaterialProvider.PreviewMaterialFactory = () => CreateEmoteMaterial(true);
+            }
 
             PatchUI();
         }
@@ -224,8 +232,36 @@ namespace ChatPlexSDK_BS
         ////////////////////////////////////////////////////////////////////////////
 
         /// <summary>
-        /// Patch UI system
+        /// Create a particle or preview material using the game's URP shader.
         /// </summary>
+        private static Material CreateEmoteMaterial(bool preview)
+        {
+            // This shader is shipped in 1.45.1's shared assets with a
+            // UniversalPipeline pass; the SDK's bundled materials are Built-in only.
+            var shader = Shader.Find("Custom/CustomParticles");
+            if (shader == null)
+                throw new InvalidOperationException("Beat Saber's URP particle shader has not loaded.");
+
+            var material = new Material(shader) { name = preview ? "ChatPlex Emote Preview" : "ChatPlex Emotes" };
+            material.SetColor("_Color", Color.white);
+            material.SetFloat("_WhiteBoostType", 0f);
+            material.SetFloat("_FogType", 0f);
+            material.SetFloat("_CustomZWrite", 0f);
+            material.SetFloat("_CullMode", 0f);
+            material.SetFloat("_ZTest", (float)UnityEngine.Rendering.CompareFunction.LessEqual);
+            // Match the color blending used by the game's NoGlowNoFogSprite material.
+            material.SetFloat("_BlendSrcFactor", (float)UnityEngine.Rendering.BlendMode.One);
+            material.SetFloat("_BlendDstFactor", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_BlendSrcFactorA", (float)UnityEngine.Rendering.BlendMode.One);
+            material.SetFloat("_BlendDstFactorA", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_UseMainTex", preview ? 0f : 1f);
+            material.SetFloat("_EnableTextureColor", preview ? 0f : 1f);
+            material.SetFloat("_EnableVertexColor", preview ? 0f : 1f);
+            material.shaderKeywords = preview ? Array.Empty<string>() : new[] { "MAIN_TEXTURE", "TEXTURE_COLOR", "VERTEX_COLOR" };
+            material.renderQueue = 3000;
+            return material;
+        }
+
         private void PatchUI()
         {
             CP_SDK.UI.UISystem.FloatingPanelFactory = new CP_SDK_BS.UI.DefaultFactoriesOverrides.BS_FloatingPanelFactory();
