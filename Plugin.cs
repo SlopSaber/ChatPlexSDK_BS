@@ -7,8 +7,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using VRUIControls;
 
 namespace ChatPlexSDK_BS
@@ -29,6 +32,10 @@ namespace ChatPlexSDK_BS
         private static BasicUIAudioManager  m_BasicUIAudioManager = null;
         private static Material             m_UINoGlowMaterial;
         private static VRGraphicRaycaster   m_VRGraphicRaycasterCache;
+
+        private static AsyncOperationHandle<Shader> m_EmoteShaderHandle;
+        private static Task m_EmoteShaderLoadTask;
+        internal static bool IsQuitting { get; private set; }
 
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
@@ -124,6 +131,7 @@ namespace ChatPlexSDK_BS
         [OnExit]
         public void OnApplicationQuit() 
         {
+            IsQuitting = true;
             try
             {
                 CP_SDK.ChatPlexSDK.StopModules();
@@ -136,6 +144,12 @@ namespace ChatPlexSDK_BS
             {
                 CP_SDK.ChatPlexSDK.Logger.Error("[ChatPlexSDK_BS][Plugin.OnEnable] Error:");
                 CP_SDK.ChatPlexSDK.Logger.Error(exception);
+            }
+            finally
+            {
+                if (m_EmoteShaderHandle.IsValid())
+                    Addressables.Release(m_EmoteShaderHandle);
+                m_EmoteShaderHandle = default;
             }
         }
 
@@ -234,11 +248,36 @@ namespace ChatPlexSDK_BS
         /// <summary>
         /// Create a particle or preview material using the game's URP shader.
         /// </summary>
+        internal static Task PrepareEmoteShaderAsync()
+        {
+            if (CP_SDK.ChatPlexSDK.RenderPipeline != CP_SDK.ERenderPipeline.URP || IsQuitting)
+                return Task.CompletedTask;
+
+            if (m_EmoteShaderLoadTask == null || m_EmoteShaderLoadTask.IsFaulted)
+                m_EmoteShaderLoadTask = LoadEmoteShaderAsync();
+            return m_EmoteShaderLoadTask;
+        }
+
+        private static async Task LoadEmoteShaderAsync()
+        {
+            if (m_EmoteShaderHandle.IsValid())
+                Addressables.Release(m_EmoteShaderHandle);
+
+            // Verified address in the game's catalog. Retain its bundle dependencies
+            // until module shutdown so scene unloading cannot invalidate materials.
+            m_EmoteShaderHandle = Addressables.LoadAssetAsync<Shader>("Assets/Visuals/Shaders/CustomParticles.shader");
+            await m_EmoteShaderHandle.Task;
+            if (!IsQuitting && (m_EmoteShaderHandle.Status != AsyncOperationStatus.Succeeded || m_EmoteShaderHandle.Result == null))
+                throw new InvalidOperationException("Could not load Beat Saber's URP particle shader.", m_EmoteShaderHandle.OperationException);
+        }
+
         private static Material CreateEmoteMaterial(bool preview)
         {
             // This shader is shipped in 1.45.1's shared assets with a
             // UniversalPipeline pass; the SDK's bundled materials are Built-in only.
-            var shader = Shader.Find("Custom/CustomParticles");
+            var shader = m_EmoteShaderHandle.IsValid() && m_EmoteShaderHandle.Status == AsyncOperationStatus.Succeeded
+                ? m_EmoteShaderHandle.Result
+                : null;
             if (shader == null)
                 throw new InvalidOperationException("Beat Saber's URP particle shader has not loaded.");
 

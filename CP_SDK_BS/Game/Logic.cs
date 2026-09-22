@@ -26,6 +26,8 @@ namespace CP_SDK_BS.Game
 
         private static bool m_LastMainSceneWasNotMenu   = false;
         private static bool m_WasInReplay               = false;
+        private static bool m_MenuModulesPending;
+        private static bool m_InitializingMenuModules;
 
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
@@ -127,6 +129,8 @@ namespace CP_SDK_BS.Game
 
                 if (LevelCompletionData != null && OnLevelEnded != null)
                     OnLevelEnded.Invoke(LevelCompletionData);
+
+                InitializeMenuModulesAsync();
             }
             catch (Exception p_Exception)
             {
@@ -158,12 +162,8 @@ namespace CP_SDK_BS.Game
                 LevelCompletionData     = null;
                 m_WasInReplay           = false;
 
-                CP_SDK.ChatPlexSDK.Fire_OnGenericMenuSceneLoaded();
-
-                if (OnMenuSceneLoaded != null)
-                    OnMenuSceneLoaded.Invoke();
-
-                OnMenuSceneActive();
+                m_MenuModulesPending = true;
+                InitializeMenuModulesAsync();
             }
             catch (Exception p_Exception)
             {
@@ -171,6 +171,36 @@ namespace CP_SDK_BS.Game
                 CP_SDK.ChatPlexSDK.Logger.Error(p_Exception);
             }
         }
+        private static async void InitializeMenuModulesAsync()
+        {
+            if (!m_MenuModulesPending || m_InitializingMenuModules || ChatPlexSDK_BS.Plugin.IsQuitting)
+                return;
+
+            m_InitializingMenuModules = true;
+            try
+            {
+                await ChatPlexSDK_BS.Plugin.PrepareEmoteShaderAsync();
+                // If the player left the menu while loading, retry initialization
+                // on their next return instead of reporting a false menu transition.
+                if (ActiveScene != ESceneType.Menu || ChatPlexSDK_BS.Plugin.IsQuitting)
+                    return;
+
+                m_MenuModulesPending = false;
+                CP_SDK.ChatPlexSDK.Fire_OnGenericMenuSceneLoaded();
+                OnMenuSceneLoaded?.Invoke();
+                OnMenuSceneActive();
+            }
+            catch (Exception exception)
+            {
+                CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][Logic.InitializeMenuModulesAsync] Error:");
+                CP_SDK.ChatPlexSDK.Logger.Error(exception);
+            }
+            finally
+            {
+                m_InitializingMenuModules = false;
+            }
+        }
+
         /// <summary>
         /// On game scene active
         /// </summary>

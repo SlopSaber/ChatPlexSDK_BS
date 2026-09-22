@@ -184,6 +184,8 @@
             <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.dll</HintPath>
             <Private>False</Private>
         </Reference>
+        <Reference Include="Unity.Addressables" HintPath="$(BeatSaberDir)\Beat Saber_Data\Managed\Unity.Addressables.dll" Private="false" />
+        <Reference Include="Unity.ResourceManager" HintPath="$(BeatSaberDir)\Beat Saber_Data\Managed\Unity.ResourceManager.dll" Private="false" />
         <Reference Include="UnityEngine.AssetBundleModule">
             <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.AssetBundleModule.dll</HintPath>
             <Private>False</Private>
