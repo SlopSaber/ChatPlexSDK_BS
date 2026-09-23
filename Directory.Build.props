@@ -39,7 +39,6 @@
 
     <ItemGroup>
         <OutputCopy Include="$(OutputPath)\$(TargetFileName)" OutputPath="Plugins\$(TargetFileName)" />
-        <OutputCopy Include="$(OutputPath)\$(TargetName).pdb" OutputPath="Plugins\$(TargetName).pdb" />
     </ItemGroup>
 
 </Project>
