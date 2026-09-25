@@ -15,30 +15,14 @@ namespace CP_SDK_BS.UI
             var gameObject = new UnityEngine.GameObject("MenuTitleBarOverlay", typeof(UnityEngine.RectTransform));
             gameObject.layer = 5;
             var rect = gameObject.transform as UnityEngine.RectTransform;
-            rect.SetParent(parent, false);
+            var title = UnityEngine.Resources.FindObjectsOfTypeAll<HMUI.TitleViewController>().First();
+            rect.SetParent(title.transform, false);
             rect.anchorMin = UnityEngine.Vector2.zero;
             rect.anchorMax = UnityEngine.Vector2.one;
             rect.sizeDelta = UnityEngine.Vector2.zero;
             rect.anchoredPosition = UnityEngine.Vector2.zero;
             rect.SetAsLastSibling();
-
-            var parentCanvas = parent.GetComponentInParent<UnityEngine.Canvas>();
-            var parentCurve = parentCanvas?.rootCanvas.GetComponent<HMUI.CurvedCanvasSettings>();
-            var canvas = gameObject.AddComponent<UnityEngine.Canvas>();
-            canvas.overrideSorting = true;
-            canvas.sortingOrder = 100;
-            canvas.additionalShaderChannels |= UnityEngine.AdditionalCanvasShaderChannels.TexCoord2;
-            if (parentCurve != null)
-                gameObject.AddComponent<HMUI.CurvedCanvasSettings>().SetRadius(parentCurve.radius);
-
-            if (BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.IsInstalling)
-            {
-                BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.QueueForInject(gameObject.AddComponent<VRUIControls.VRGraphicRaycaster>());
-            }
-            else
-            {
-                BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.InstantiateComponent<VRUIControls.VRGraphicRaycaster>(gameObject);
-            }
+            gameObject.AddComponent<MenuTitleBarVisibility>().Initialize(parent.GetComponent<HMUI.ViewController>());
             return rect;
         }
 
@@ -129,6 +113,38 @@ namespace CP_SDK_BS.UI
 
             l_ButtonObject.SetActive(true);
             return l_ButtonObject.GetComponent<UnityEngine.UI.Button>();
+        }
+    }
+
+    internal class MenuTitleBarVisibility : UnityEngine.MonoBehaviour
+    {
+        private HMUI.ViewController navigationController;
+
+        internal void Initialize(HMUI.ViewController controller)
+        {
+            navigationController = controller;
+            navigationController.didActivateEvent += OnActivated;
+            navigationController.didDeactivateEvent += OnDeactivated;
+            gameObject.SetActive(navigationController.isActivated);
+        }
+
+        private void OnActivated(bool firstActivation, bool addedToHierarchy, bool screenSystemEnabling)
+        {
+            gameObject.SetActive(true);
+        }
+
+        private void OnDeactivated(bool removedFromHierarchy, bool screenSystemDisabling)
+        {
+            gameObject.SetActive(false);
+        }
+
+        private void OnDestroy()
+        {
+            if (navigationController != null)
+            {
+                navigationController.didActivateEvent -= OnActivated;
+                navigationController.didDeactivateEvent -= OnDeactivated;
+            }
         }
     }
 }
