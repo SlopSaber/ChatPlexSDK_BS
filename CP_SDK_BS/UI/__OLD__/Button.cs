@@ -10,6 +10,26 @@ namespace CP_SDK_BS.UI
     /// </summary>
     public class Button
     {
+        public static void KeepAboveMenuTitleBar(UnityEngine.UI.Button button)
+        {
+            var gameObject = button.gameObject;
+            var wasActive = gameObject.activeSelf;
+            gameObject.SetActive(false);
+            var canvas = gameObject.AddComponent<UnityEngine.Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = 100;
+            if (BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.IsInstalling)
+            {
+                BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.QueueForInject(gameObject.AddComponent<VRUIControls.VRGraphicRaycaster>());
+            }
+            else
+            {
+                BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.InstantiateComponent<VRUIControls.VRGraphicRaycaster>(gameObject);
+            }
+            button.transform.SetAsLastSibling();
+            gameObject.SetActive(wasActive);
+        }
+
         /// <summary>
         /// Button creator
         /// </summary>
