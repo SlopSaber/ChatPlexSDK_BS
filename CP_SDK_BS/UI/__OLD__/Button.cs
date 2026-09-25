@@ -10,14 +10,27 @@ namespace CP_SDK_BS.UI
     /// </summary>
     public class Button
     {
-        public static void KeepAboveMenuTitleBar(UnityEngine.UI.Button button)
+        public static UnityEngine.RectTransform CreateMenuTitleBarOverlay(UnityEngine.Transform parent)
         {
-            var gameObject = button.gameObject;
-            var wasActive = gameObject.activeSelf;
-            gameObject.SetActive(false);
+            var gameObject = new UnityEngine.GameObject("MenuTitleBarOverlay", typeof(UnityEngine.RectTransform));
+            gameObject.layer = 5;
+            var rect = gameObject.transform as UnityEngine.RectTransform;
+            rect.SetParent(parent, false);
+            rect.anchorMin = UnityEngine.Vector2.zero;
+            rect.anchorMax = UnityEngine.Vector2.one;
+            rect.sizeDelta = UnityEngine.Vector2.zero;
+            rect.anchoredPosition = UnityEngine.Vector2.zero;
+            rect.SetAsLastSibling();
+
+            var parentCanvas = parent.GetComponentInParent<UnityEngine.Canvas>();
+            var parentCurve = parentCanvas?.rootCanvas.GetComponent<HMUI.CurvedCanvasSettings>();
             var canvas = gameObject.AddComponent<UnityEngine.Canvas>();
             canvas.overrideSorting = true;
             canvas.sortingOrder = 100;
+            canvas.additionalShaderChannels |= UnityEngine.AdditionalCanvasShaderChannels.TexCoord2;
+            if (parentCurve != null)
+                gameObject.AddComponent<HMUI.CurvedCanvasSettings>().SetRadius(parentCurve.radius);
+
             if (BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.IsInstalling)
             {
                 BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.QueueForInject(gameObject.AddComponent<VRUIControls.VRGraphicRaycaster>());
@@ -26,8 +39,7 @@ namespace CP_SDK_BS.UI
             {
                 BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.InstantiateComponent<VRUIControls.VRGraphicRaycaster>(gameObject);
             }
-            button.transform.SetAsLastSibling();
-            gameObject.SetActive(wasActive);
+            return rect;
         }
 
         /// <summary>
