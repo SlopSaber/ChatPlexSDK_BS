@@ -15,7 +15,8 @@ namespace CP_SDK_BS.UI
             var gameObject = new UnityEngine.GameObject("MenuTitleBarOverlay", typeof(UnityEngine.RectTransform));
             gameObject.layer = 5;
             var rect = gameObject.transform as UnityEngine.RectTransform;
-            var title = UnityEngine.Resources.FindObjectsOfTypeAll<HMUI.TitleViewController>().First();
+            var hierarchy = BeatSaberMarkupLanguage.BeatSaberUI.DiContainer.Resolve<HMUI.HierarchyManager>();
+            var title = hierarchy.GetField<HMUI.ScreenSystem, HMUI.HierarchyManager>("_screenSystem").titleViewController;
             rect.SetParent(title.transform, false);
             rect.anchorMin = UnityEngine.Vector2.zero;
             rect.anchorMax = UnityEngine.Vector2.one;
@@ -125,7 +126,7 @@ namespace CP_SDK_BS.UI
             navigationController = controller;
             navigationController.didActivateEvent += OnActivated;
             navigationController.didDeactivateEvent += OnDeactivated;
-            gameObject.SetActive(navigationController.isActivated);
+            gameObject.SetActive(navigationController.gameObject.activeInHierarchy);
         }
 
         private void OnActivated(bool firstActivation, bool addedToHierarchy, bool screenSystemEnabling)
