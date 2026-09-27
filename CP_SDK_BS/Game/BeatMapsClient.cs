@@ -34,7 +34,7 @@ namespace CP_SDK_BS.Game
         /// </summary>
         internal static void Init()
         {
-            m_CacheFolder               = $"UserData/{CP_SDK.ChatPlexSDK.ProductName}Plus/Cache/BeatMaps/";
+            m_CacheFolder               = Path.GetFullPath($"UserData/{CP_SDK.ChatPlexSDK.ProductName}Plus/Cache/BeatMaps/");
             m_WebClient                 = new CP_SDK.Network.WebClientUnity("", TimeSpan.FromSeconds(10));
             m_WebClient.DownloadTimeout = 2 * 60;
 
@@ -221,7 +221,7 @@ namespace CP_SDK_BS.Game
         {
             try
             {
-                var l_Path = m_CacheFolder + p_Key + ".json";
+                var l_Path = Path.Combine(m_CacheFolder, p_Key + ".json");
 
                 if (!File.Exists(l_Path))
                     return null;
@@ -249,7 +249,7 @@ namespace CP_SDK_BS.Game
         {
             try
             {
-                var l_Path = m_CacheFolder + p_Key + ".jpg";
+                var l_Path = Path.Combine(m_CacheFolder, p_Key + ".jpg");
 
                 if (!File.Exists(l_Path))
                     return null;
@@ -325,7 +325,7 @@ namespace CP_SDK_BS.Game
                 {
                     var l_JSON = JsonConvert.SerializeObject(p_Content);
 
-                    File.WriteAllText(m_CacheFolder + p_FileName, l_JSON, Encoding.UTF8);
+                    File.WriteAllText(Path.Combine(m_CacheFolder, p_FileName), l_JSON, Encoding.UTF8);
                 }
                 catch (Exception l_Exception)
                 {
@@ -349,7 +349,7 @@ namespace CP_SDK_BS.Game
             {
                 try
                 {
-                    File.WriteAllBytes(m_CacheFolder + p_FileName, p_Content);
+                    File.WriteAllBytes(Path.Combine(m_CacheFolder, p_FileName), p_Content);
                 }
                 catch (Exception l_Exception)
                 {
@@ -375,11 +375,11 @@ namespace CP_SDK_BS.Game
             {
                 try
                 {
-                    if (File.Exists(m_CacheFolder + p_Key + ".jpg"))
-                        File.Delete(m_CacheFolder + p_Key + ".jpg");
+                    if (File.Exists(Path.Combine(m_CacheFolder, p_Key + ".jpg")))
+                        File.Delete(Path.Combine(m_CacheFolder, p_Key + ".jpg"));
 
-                    if (File.Exists(m_CacheFolder + p_Key + ".json"))
-                        File.Delete(m_CacheFolder + p_Key + ".json");
+                    if (File.Exists(Path.Combine(m_CacheFolder, p_Key + ".json")))
+                        File.Delete(Path.Combine(m_CacheFolder, p_Key + ".json"));
                 }
                 catch (Exception l_Exception)
                 {
