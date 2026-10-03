@@ -446,6 +446,11 @@ namespace CP_SDK_BS.UI.Data
         private void ObserveCoverRequest(CoverRequest p_Request)
         {
             var l_ObserverSerial = ++p_Request.ObserverSerial;
+            if (p_Request.NetworkStarted && !p_Request.NetworkRead.TryGetResult(out _, out _, out _))
+            {
+                p_Request.NetworkRead = new Game.CoverCacheReader.Completion();
+                p_Request.NetworkStarted = false;
+            }
             CP_SDK.Unity.MTCoroutineStarter.Start(Coroutine_LoadCover(p_Request, l_ObserverSerial));
         }
 
