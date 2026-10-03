@@ -266,6 +266,17 @@ namespace CP_SDK_BS.Game
 
             return null;
         }
+        internal static CoverCacheReader.Request ReadCoverImageFromCacheByKey(string p_Key)
+        {
+            try
+            {
+                return CoverCacheReader.Read(Path.Combine(m_CacheFolder, p_Key + ".jpg"));
+            }
+            catch (Exception l_Exception)
+            {
+                return CoverCacheReader.Failed(l_Exception);
+            }
+        }
 
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////

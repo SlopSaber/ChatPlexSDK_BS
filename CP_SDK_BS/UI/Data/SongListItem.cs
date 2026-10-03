@@ -24,6 +24,25 @@ namespace CP_SDK_BS.UI.Data
         ////////////////////////////////////////////////////////////////////////////
 
         private bool                        m_WasInit               = false;
+        private long                        m_CoverRequestSerial;
+        private CoverRequest                m_CoverRequest;
+
+        private sealed class CoverRequest
+        {
+            internal long                           Serial;
+            internal Game.BeatMaps.MapDetail         Map;
+            internal Game.BeatMaps.MapVersion        Version;
+            internal BeatmapLevel                    Level;
+            internal string                          MapID;
+            internal string                          LevelID;
+            internal string                          Hash;
+            internal Game.CoverCacheReader.Request    CacheRead;
+            internal Game.CoverCacheReader.Completion NetworkRead;
+            internal bool                            CacheConsumed;
+            internal bool                            NetworkStarted;
+            internal bool                            Finished;
+            internal long                            ObserverSerial;
+        }
 
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
@@ -356,65 +375,210 @@ namespace CP_SDK_BS.UI.Data
         /// </summary>
         private void LoadLevelCover()
         {
-            if (!Cover && m_CoverCache.TryGetValue(GetLevelHash(), out var l_Cover))
+            var l_Hash = GetLevelHash();
+            if (!Cover && m_CoverCache.TryGetValue(l_Hash, out var l_Cover))
             {
                 if (l_Cover)
                 {
-                    CoverLoaded(l_Cover);
+                    var l_CachedRequest = CreateCoverRequest();
+                    l_CachedRequest.Finished = true;
+                    CoverLoaded(l_Cover, l_CachedRequest);
                     return;
                 }
 
-                m_CoverCache.Remove(GetLevelHash());
+                m_CoverCache.Remove(l_Hash);
             }
 
-            if (Game.Levels.TryGetBeatmapLevelForLevelID(GetLevelID(), out var l_LocalSong, silentFail: true))
+            if (m_CoverRequest != null && !m_CoverRequest.Finished && IsCurrentCoverRequest(m_CoverRequest))
             {
-                Game.Levels.TryLoadBeatmapLevelCoverAsync(l_LocalSong, (_, p_Sprite) => CoverLoaded(p_Sprite));
+                ObserveCoverRequest(m_CoverRequest);
+                return;
             }
-            else if (BeatSaver_Map != null)
+
+            var l_Request = CreateCoverRequest();
+            if (!IsCurrentCoverRequest(l_Request))
+                return;
+            if (Game.Levels.TryGetBeatmapLevelForLevelID(l_Request.LevelID, out var l_LocalSong, silentFail: true))
             {
-                var l_CoverByte = Game.BeatMapsClient.GetCoverImageFromCacheByKey(BeatSaver_Map.id);
-                if (l_CoverByte != null && l_CoverByte.Length > 0)
+                if (!IsCurrentCoverRequest(l_Request))
+                    return;
+                l_Request.Finished = true;
+                Game.Levels.TryLoadBeatmapLevelCoverAsync(l_LocalSong, (_, p_Sprite) => CoverLoaded(p_Sprite, l_Request));
+            }
+            else if (l_Request.Map != null)
+            {
+                l_Request.CacheRead = Game.BeatMapsClient.ReadCoverImageFromCacheByKey(l_Request.MapID);
+                ObserveCoverRequest(l_Request);
+            }
+            else
+                l_Request.Finished = true;
+        }
+
+        private CoverRequest CreateCoverRequest()
+        {
+            var l_Map = BeatSaver_Map;
+            var l_Request = new CoverRequest
+            {
+                Serial = ++m_CoverRequestSerial,
+                Map = l_Map,
+                Version = l_Map?.SelectMapVersion(),
+                Level = BeatmapLevel,
+                MapID = l_Map?.id,
+                LevelID = GetLevelID(),
+                Hash = GetLevelHash()
+            };
+            m_CoverRequest = l_Request;
+            return l_Request;
+        }
+
+        private bool IsCurrentCoverRequest(CoverRequest p_Request)
+        {
+            return ReferenceEquals(m_CoverRequest, p_Request)
+                && m_CoverRequestSerial == p_Request.Serial
+                && ReferenceEquals(BeatSaver_Map, p_Request.Map)
+                && ReferenceEquals(BeatmapLevel, p_Request.Level)
+                && ReferenceEquals(BeatSaver_Map?.SelectMapVersion(), p_Request.Version)
+                && string.Equals(BeatSaver_Map?.id, p_Request.MapID, StringComparison.Ordinal)
+                && string.Equals(GetLevelID(), p_Request.LevelID, StringComparison.Ordinal)
+                && string.Equals(GetLevelHash(), p_Request.Hash, StringComparison.Ordinal);
+        }
+
+        private void ObserveCoverRequest(CoverRequest p_Request)
+        {
+            var l_ObserverSerial = ++p_Request.ObserverSerial;
+            CP_SDK.Unity.MTCoroutineStarter.Start(Coroutine_LoadCover(p_Request, l_ObserverSerial));
+        }
+
+        private bool IsCurrentCoverObserver(CoverRequest p_Request, long p_ObserverSerial)
+        {
+            return ReferenceEquals(m_CoverRequest, p_Request)
+                && m_CoverRequestSerial == p_Request.Serial
+                && p_Request.ObserverSerial == p_ObserverSerial && !p_Request.Finished;
+        }
+
+        private IEnumerator Coroutine_LoadCover(CoverRequest p_Request, long p_ObserverSerial)
+        {
+            while (IsCurrentCoverObserver(p_Request, p_ObserverSerial))
+            {
+                if (!p_Request.CacheConsumed)
                 {
-                    var l_Texture = CP_SDK.Unity.Texture2DU.CreateFromRaw(l_CoverByte);
-                    if (l_Texture != null)
-                        CoverLoaded(Sprite.Create(l_Texture, new Rect(0, 0, l_Texture.width, l_Texture.height), new Vector2(0.5f, 0.5f), 100));
-                }
-                else
-                {
-                    /// Fetch cover
-                    BeatSaver_Map.SelectMapVersion().CoverImageBytes((p_Valid, p_CoverTaskResult) =>
+                    if (!p_Request.CacheRead.Result.TryGetResult(out var l_CacheBytes, out _, out var l_CacheError))
                     {
-                        if (p_Valid)
-                            Game.BeatMapsClient.CacheCoverImage(BeatSaver_Map, p_CoverTaskResult);
+                        yield return null;
+                        continue;
+                    }
+                    if (!IsCurrentCoverRequest(p_Request))
+                        yield break;
 
-                        CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() =>
-                        {
-                            var l_Texture = CP_SDK.Unity.Texture2DU.CreateFromRaw(p_CoverTaskResult);
-                            if (l_Texture != null)
-                                CoverLoaded(Sprite.Create(l_Texture, new Rect(0, 0, l_Texture.width, l_Texture.height), new Vector2(0.5f, 0.5f), 100));
-                        });
-                    });
+                    p_Request.CacheConsumed = true;
+                    if (l_CacheBytes != null && l_CacheBytes.Length > 0)
+                    {
+                        p_Request.Finished = true;
+                        CoverBytesLoaded(l_CacheBytes, p_Request);
+                        yield break;
+                    }
+
+                    p_Request.NetworkRead = new Game.CoverCacheReader.Completion();
+                    if (l_CacheError != null)
+                    {
+                        CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][BeatMapsClient.GetCoverImageFromCacheByKey] Error :");
+                        CP_SDK.ChatPlexSDK.Logger.Error(l_CacheError);
+                        if (!IsCurrentCoverObserver(p_Request, p_ObserverSerial) || !IsCurrentCoverRequest(p_Request))
+                            yield break;
+                    }
                 }
+
+                if (!p_Request.NetworkStarted)
+                {
+                    if (!IsCurrentCoverRequest(p_Request))
+                        yield break;
+                    p_Request.NetworkStarted = true;
+                    var l_NetworkRead = p_Request.NetworkRead;
+                    Exception l_NetworkError = null;
+                    try
+                    {
+                        p_Request.Version.CoverImageBytes(l_NetworkRead.CompleteNetwork);
+                    }
+                    catch (Exception l_Exception)
+                    {
+                        l_NetworkError = l_Exception;
+                    }
+                    if (l_NetworkError != null)
+                    {
+                        p_Request.Finished = true;
+                        CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.UI.Data][SongListItem.LoadLevelCover] Error:");
+                        CP_SDK.ChatPlexSDK.Logger.Error(l_NetworkError);
+                        yield break;
+                    }
+                    if (!IsCurrentCoverObserver(p_Request, p_ObserverSerial) || !IsCurrentCoverRequest(p_Request))
+                        yield break;
+                }
+
+                if (!p_Request.NetworkRead.TryGetResult(out var l_NetworkBytes, out var l_Valid, out _))
+                {
+                    yield return null;
+                    continue;
+                }
+                p_Request.Finished = true;
+                if (!IsCurrentCoverRequest(p_Request))
+                    yield break;
+                if (l_Valid)
+                {
+                    Game.BeatMapsClient.CacheCoverImage(p_Request.Map, l_NetworkBytes);
+                    if (!IsCurrentCoverRequest(p_Request))
+                        yield break;
+                }
+                CoverBytesLoaded(l_NetworkBytes, p_Request);
+                yield break;
             }
+        }
+
+        private void CoverBytesLoaded(byte[] p_Bytes, CoverRequest p_Request)
+        {
+            if (!IsCurrentCoverRequest(p_Request))
+                return;
+            var l_Texture = CP_SDK.Unity.Texture2DU.CreateFromRaw(p_Bytes);
+            if (!l_Texture)
+                return;
+            if (!IsCurrentCoverRequest(p_Request))
+            {
+                UnityEngine.Object.Destroy(l_Texture);
+                return;
+            }
+            var l_Sprite = Sprite.Create(l_Texture, new Rect(0, 0, l_Texture.width, l_Texture.height), new Vector2(0.5f, 0.5f), 100);
+            if (!IsCurrentCoverRequest(p_Request))
+            {
+                UnityEngine.Object.Destroy(l_Sprite);
+                UnityEngine.Object.Destroy(l_Texture);
+                return;
+            }
+            CoverLoaded(l_Sprite, p_Request);
         }
         /// <summary>
         /// Level cover loaded
         /// </summary>
         /// <param name="p_Cover">Loaded cover</param>
-        private void CoverLoaded(Sprite p_Cover)
+        private void CoverLoaded(Sprite p_Cover, CoverRequest p_Request)
         {
+            if (!IsCurrentCoverRequest(p_Request))
+                return;
             Cover = p_Cover;
 
-            if (!m_CoverCache.ContainsKey(GetLevelHash()))
-                m_CoverCache.Add(GetLevelHash(), p_Cover);
+            if (!m_CoverCache.ContainsKey(p_Request.Hash))
+                m_CoverCache.Add(p_Request.Hash, p_Cover);
 
-            if ((Cell is SongListCell l_SongListCell))
+            if (Cell is SongListCell l_SongListCell && l_SongListCell
+                && ReferenceEquals(l_SongListCell.ListItem, this) && l_SongListCell.OwnerList && l_SongListCell.Cover)
                 l_SongListCell.Cover.SetSprite(Cover ?? m_DefaultCover);
 
+            if (!IsCurrentCoverRequest(p_Request))
+                return;
+            var l_Controller = SongListController;
+            if (l_Controller is UnityEngine.Object l_NativeController && !l_NativeController)
+                return;
             try
             {
-                SongListController?.OnSongListItemCoverFetched(this);
+                l_Controller?.OnSongListItemCoverFetched(this);
             }
             catch (Exception l_Exception)
             {
