@@ -19,9 +19,11 @@ namespace CP_SDK_BS.Game
         /// <param name="p_Callback">Request callback</param>
         public static void GetPlayerAvatarPicture(string p_PlayerID, CancellationToken p_CancellationToken, Action<Sprite> p_Callback)
         {
+            if (p_CancellationToken.IsCancellationRequested)
+                return;
             GetScoreSaberAvatarPicture(p_PlayerID, p_CancellationToken, p_Callback, () =>
             {
-                GetBeatLeaderAvatarPicture(p_PlayerID, p_CancellationToken, p_Callback, () => p_Callback?.Invoke(null));
+                GetBeatLeaderAvatarPicture(p_PlayerID, p_CancellationToken, p_Callback, () => PublishFailure(p_CancellationToken, p_Callback));
             });
         }
 
@@ -37,8 +39,12 @@ namespace CP_SDK_BS.Game
         /// <param name="p_OnFailCallback">On error callback</param>
         private static void GetScoreSaberAvatarPicture(string p_PlayerID, CancellationToken p_CancellationToken, Action<Sprite> p_Callback, Action p_OnFailCallback)
         {
+            if (p_CancellationToken.IsCancellationRequested)
+                return;
             WebClientUnity.GlobalClient.GetAsync($"https://cdn.scoresaber.com/avatars/{p_PlayerID}.jpg", p_CancellationToken, (p_AvatarResult) =>
             {
+                if (p_CancellationToken.IsCancellationRequested)
+                    return;
                 try
                 {
                     if (p_AvatarResult == null || !p_AvatarResult.IsSuccessStatusCode || p_AvatarResult.BodyBytes?.Length == 0)
@@ -47,7 +53,7 @@ namespace CP_SDK_BS.Game
                         return;
                     }
 
-                    ProcessAvatarBytes(p_PlayerID, p_Callback, p_AvatarResult.BodyBytes);
+                    ProcessAvatarBytes(p_PlayerID, p_CancellationToken, p_Callback, p_AvatarResult.BodyBytes);
                 }
                 catch (Exception l_Exception)
                 {
@@ -66,8 +72,12 @@ namespace CP_SDK_BS.Game
         /// <param name="p_OnFailCallback">On error callback</param>
         private static void GetBeatLeaderAvatarPicture(string p_PlayerID, CancellationToken p_CancellationToken, Action<Sprite> p_Callback, Action p_OnFailCallback)
         {
+            if (p_CancellationToken.IsCancellationRequested)
+                return;
             WebClientUnity.GlobalClient.GetAsync($"https://api.beatleader.xyz/player/{p_PlayerID}", p_CancellationToken, (p_PlayerResult) =>
             {
+                if (p_CancellationToken.IsCancellationRequested)
+                    return;
                 try
                 {
                     if (p_PlayerResult == null || !p_PlayerResult.IsSuccessStatusCode || p_PlayerResult.BodyBytes?.Length == 0)
@@ -85,6 +95,8 @@ namespace CP_SDK_BS.Game
 
                     WebClientUnity.GlobalClient.GetAsync(l_JSON["avatar"].Value<string>(), p_CancellationToken, (p_AvatarResult) =>
                     {
+                        if (p_CancellationToken.IsCancellationRequested)
+                            return;
                         try
                         {
                             if (p_AvatarResult == null || !p_AvatarResult.IsSuccessStatusCode || p_AvatarResult.BodyBytes?.Length == 0)
@@ -93,7 +105,7 @@ namespace CP_SDK_BS.Game
                                 return;
                             }
 
-                            ProcessAvatarBytes(p_PlayerID, p_Callback, p_AvatarResult.BodyBytes);
+                            ProcessAvatarBytes(p_PlayerID, p_CancellationToken, p_Callback, p_AvatarResult.BodyBytes);
                         }
                         catch (Exception l_Exception)
                         {
@@ -115,25 +127,59 @@ namespace CP_SDK_BS.Game
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
 
+        private static void PublishFailure(CancellationToken p_CancellationToken, Action<Sprite> p_Callback)
+        {
+            if (p_CancellationToken.IsCancellationRequested || p_Callback == null)
+                return;
+            CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() =>
+            {
+                if (!p_CancellationToken.IsCancellationRequested)
+                    p_Callback(null);
+            });
+        }
+
         /// <summary>
         /// Process received avatar body bytes
         /// </summary>
         /// <param name="p_PlayerID">ID of the player</param>
         /// <param name="p_Callback">Request callback</param>
         /// <param name="p_BodyBytes">Avatar bytes</param>
-        private static void ProcessAvatarBytes(string p_PlayerID, Action<Sprite> p_Callback, byte[] p_BodyBytes)
+        private static void ProcessAvatarBytes(string p_PlayerID, CancellationToken p_CancellationToken, Action<Sprite> p_Callback, byte[] p_BodyBytes)
         {
             CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() =>
             {
+                if (p_CancellationToken.IsCancellationRequested || p_Callback == null)
+                    return;
                 var l_Texture = CP_SDK.Unity.Texture2DU.CreateFromRaw(p_BodyBytes);
+                if (p_CancellationToken.IsCancellationRequested)
+                {
+                    if (l_Texture != null)
+                        UnityEngine.Object.Destroy(l_Texture);
+                    return;
+                }
                 if (l_Texture == null)
                 {
-                    p_Callback?.Invoke(null);
+                    p_Callback(null);
                     return;
                 }
 
-                var l_Avatar = Sprite.Create(l_Texture, new Rect(0, 0, l_Texture.width, l_Texture.height), new Vector2(0.5f, 0.5f), 100);
-                p_Callback?.Invoke(l_Avatar);
+                Sprite l_Avatar;
+                try
+                {
+                    l_Avatar = Sprite.Create(l_Texture, new Rect(0, 0, l_Texture.width, l_Texture.height), new Vector2(0.5f, 0.5f), 100);
+                }
+                catch
+                {
+                    UnityEngine.Object.Destroy(l_Texture);
+                    throw;
+                }
+                if (p_CancellationToken.IsCancellationRequested)
+                {
+                    UnityEngine.Object.Destroy(l_Avatar);
+                    UnityEngine.Object.Destroy(l_Texture);
+                    return;
+                }
+                p_Callback(l_Avatar);
             });
         }
     }
