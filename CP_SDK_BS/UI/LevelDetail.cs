@@ -85,6 +85,9 @@ namespace CP_SDK_BS.UI
         private CPrimaryButton                                  m_PrimaryButton                             = null;
         private GameObject                                      m_FavoriteToggle                            = null;
         private BeatmapLevel                                    m_LocalBeatMap                              = null;
+        private long                                            m_DifficultyRevision;
+        private CancellationTokenSource                         m_DifficultyCancellation;
+        private Task                                            m_DifficultyLoadTask;
         private Game.BeatMaps.MapDetail                         m_BeatMap                                   = null;
         private BeatmapDifficulty?                              m_LimitedBeatmapDifficulty                  = null;
 
@@ -394,6 +397,7 @@ namespace CP_SDK_BS.UI
         /// </summary>
         public void Reset()
         {
+            RetireDifficultyLoad();
             m_LocalBeatMap = null;
             m_BeatMap = null;
             m_LimitedBeatmapDifficulty = null;
@@ -817,6 +821,73 @@ namespace CP_SDK_BS.UI
                 OnDifficultyChanged(null, difficulties.Count - 1);
             }
         }
+        private void RetireDifficultyLoad()
+        {
+            ++m_DifficultyRevision;
+            m_DifficultyCancellation?.Cancel();
+            m_DifficultyCancellation = null;
+        }
+
+        private bool IsCurrentDifficulty(BeatmapLevel p_Level, long p_Revision, CancellationToken p_Token)
+        {
+            return !p_Token.IsCancellationRequested && m_GameObject
+                && p_Revision == m_DifficultyRevision && ReferenceEquals(p_Level, m_LocalBeatMap);
+        }
+
+        private async Task LoadBasicInfoAsync(BeatmapLevel p_Level, string p_LevelID, BeatmapKey p_Key,
+            float p_Duration, long p_Revision, CancellationTokenSource p_Request)
+        {
+            var l_Token = p_Request.Token;
+            Task<BeatmapDataBasicInfo> l_BasicTask = null;
+            try
+            {
+                await Game.Levels.LoadBeatmapLevelDataByLevelID(p_LevelID, (level, data) =>
+                {
+                    if (data == null || !IsCurrentDifficulty(p_Level, p_Revision, l_Token))
+                        return;
+                    var l_Loader = Resources.FindObjectsOfTypeAll<StandardLevelDetailView>()
+                        .FirstOrDefault(x => x._beatmapDataLoader != null)?._beatmapDataLoader;
+                    if (l_Loader != null)
+                        l_BasicTask = l_Loader.LoadBasicBeatmapDataAsync(data, p_Key);
+                }, l_Token).ConfigureAwait(false);
+                if (l_BasicTask == null)
+                    return;
+
+                var l_Info = await l_BasicTask.ConfigureAwait(false);
+                l_Token.ThrowIfCancellationRequested();
+                if (l_Info == null)
+                    return;
+                var l_Notes = l_Info.cuttableNotesCount;
+                var l_Obstacles = l_Info.obstaclesCount;
+                var l_Bombs = l_Info.bombsCount;
+                var l_NPS = (float)l_Notes / p_Duration;
+                await Game.Levels.RunOnOwnerAsync(() =>
+                {
+                    if (!IsCurrentDifficulty(p_Level, p_Revision, l_Token))
+                        return;
+                    NPS = l_NPS;
+                    Notes = l_Notes;
+                    Obstacles = l_Obstacles;
+                    Bombs = l_Bombs;
+                }).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception l_Exception)
+            {
+                CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.UI][LevelDetail.LoadBasicInfoAsync] Error:");
+                CP_SDK.ChatPlexSDK.Logger.Error(l_Exception);
+            }
+            finally
+            {
+                await Game.Levels.RunOnOwnerAsync(() =>
+                {
+                    if (ReferenceEquals(m_DifficultyCancellation, p_Request))
+                        m_DifficultyCancellation = null;
+                    p_Request.Dispose();
+                }).ConfigureAwait(false);
+            }
+        }
+
         /// <summary>
         /// When the difficulty is changed
         /// </summary>
@@ -824,6 +895,7 @@ namespace CP_SDK_BS.UI
         /// <param name="p_Index">New selected index</param>
         private void OnDifficultyChanged(HMUI.SegmentedControl p_SegmentControl, int p_Index)
         {
+            RetireDifficultyLoad();
             if (m_LocalBeatMap != null)
             {
                 var l_Characs = m_LocalBeatMap.GetCharacteristics().Distinct();
@@ -863,30 +935,10 @@ namespace CP_SDK_BS.UI
                 Obstacles       = l_DifficultyBeatmap.obstaclesCount;
                 Bombs           = l_DifficultyBeatmap.bombsCount;
 
-                var localBeatMap = m_LocalBeatMap;
-                _ = Game.Levels.LoadBeatmapLevelDataByLevelID(m_LocalBeatMap.levelID, (beatmapLevel, beatmapLevelData) =>
-                {
-                    if (beatmapLevelData == null || localBeatMap != m_LocalBeatMap)
-                        return;
-
-                    var beatmpDataLoader = Resources.FindObjectsOfTypeAll<StandardLevelDetailView>().FirstOrDefault((x) => x._beatmapDataLoader != null)?._beatmapDataLoader;
-                    if (beatmpDataLoader != null)
-                    {
-                        var task = beatmpDataLoader.LoadBasicBeatmapDataAsync(beatmapLevelData, l_BeatmapKey);
-                        task.ContinueWith((result) =>
-                        {
-                            if (result?.Result == null || localBeatMap != m_LocalBeatMap)
-                                return;
-
-                            var infos = result.Result;
-
-                            NPS = ((float)infos.cuttableNotesCount / (float)m_LocalBeatMap.songDuration);
-                            Notes = infos.cuttableNotesCount;
-                            Obstacles = infos.obstaclesCount;
-                            Bombs = infos.bombsCount;
-                        });
-                    }
-                });
+                var l_Request = new CancellationTokenSource();
+                m_DifficultyCancellation = l_Request;
+                m_DifficultyLoadTask = LoadBasicInfoAsync(m_LocalBeatMap, m_LocalBeatMap.levelID,
+                    l_BeatmapKey, (float)m_LocalBeatMap.songDuration, m_DifficultyRevision, l_Request);
 
                 if (OnActiveDifficultyChanged != null)
                     OnActiveDifficultyChanged.Invoke(l_BeatmapKey);

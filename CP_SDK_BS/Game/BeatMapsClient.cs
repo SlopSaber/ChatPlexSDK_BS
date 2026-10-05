@@ -414,11 +414,17 @@ namespace CP_SDK_BS.Game
         /// <returns></returns>
         public static void DownloadSong(BeatMaps.MapDetail p_Song, BeatMaps.MapVersion p_Version, CancellationToken p_Token, Action<bool, string> p_Callback, IProgress<float> p_Progress = null)
         {
+            var l_CallbackInvoked = 0;
+            Action<bool, string> l_Complete = (success, path) =>
+            {
+                if (Interlocked.Exchange(ref l_CallbackInvoked, 1) == 0)
+                    p_Callback?.Invoke(success, path);
+            };
             p_Version.ZipBytes(p_Token, (p_Result) =>
             {
                 if (p_Result == null || p_Token.IsCancellationRequested)
                 {
-                    p_Callback?.Invoke(false, string.Empty);
+                    l_Complete(false, string.Empty);
                     return;
                 }
 
@@ -433,22 +439,26 @@ namespace CP_SDK_BS.Game
 
                     if (p_Token.IsCancellationRequested)
                     {
-                        p_Callback?.Invoke(false, string.Empty);
+                        l_Complete(false, string.Empty);
                         return;
                     }
 
                     var l_ExtractResult = ExtractZip(p_Song, p_Result, l_CustomSongsPath);
-                    p_Callback?.Invoke(l_ExtractResult.Item1, l_ExtractResult.Item2);
+                    l_Complete(l_ExtractResult.Item1, l_ExtractResult.Item2);
                 }
                 catch (Exception p_Exception)
                 {
                     if (p_Exception is TaskCanceledException)
                     {
                         CP_SDK.ChatPlexSDK.Logger.Warning("[CP_SDK_BS.Game][BeatMapsClient] Song Download Aborted.");
-                        throw p_Exception;
+                        l_Complete(false, string.Empty);
                     }
                     else
+                    {
                         CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][BeatMapsClient] Failed to download Song!");
+                        CP_SDK.ChatPlexSDK.Logger.Error(p_Exception);
+                        l_Complete(false, string.Empty);
+                    }
                 }
             }, true, p_Progress);
         }

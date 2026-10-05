@@ -19,8 +19,6 @@ namespace CP_SDK_BS.Game
 
         private static BeatmapCharacteristicCollection      m_BeatmapCharacteristicCollection;
         private static BeatmapLevelsModel                   m_BeatmapLevelsModel;
-        private static CancellationTokenSource              m_GetLevelCancellationTokenSource;
-        private static CancellationTokenSource              m_GetLevelEntitlementStatusTokenSource;
         private static MenuTransitionsHelper                m_MenuTransitionsHelper;
         private static SimpleLevelStarter                   m_SimpleLevelStarter;
         private static PlayerDataModel                      m_PlayerDataModel;
@@ -313,26 +311,31 @@ namespace CP_SDK_BS.Game
         /// </summary>
         /// <param name="p_LevelID">Level ID</param>
         /// <returns></returns>
-        public static async Task<bool> OwnDLCLevelByLevelID(string p_LevelID)
+        public static Task<bool> OwnDLCLevelByLevelID(string p_LevelID)
+        {
+            return OwnDLCLevelByLevelID(p_LevelID, CancellationToken.None);
+        }
+
+        private static async Task<bool> OwnDLCLevelByLevelID(string p_LevelID, CancellationToken p_Token)
         {
             if (LevelID_IsCustom(p_LevelID))
                 return true;
 
-            if (m_BeatmapLevelsModel == null)
-                m_BeatmapLevelsModel = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault(x => x._beatmapLevelsModel != null)?._beatmapLevelsModel;
-
-            if (m_BeatmapLevelsModel != null && m_BeatmapLevelsModel._entitlements != null)
+            var l_Task = await RunOnOwnerAsync(() =>
             {
-                m_GetLevelEntitlementStatusTokenSource?.Cancel();
-                m_GetLevelEntitlementStatusTokenSource = new CancellationTokenSource();
+                p_Token.ThrowIfCancellationRequested();
+                if (m_BeatmapLevelsModel == null)
+                    m_BeatmapLevelsModel = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault(x => x._beatmapLevelsModel != null)?._beatmapLevelsModel;
 
-                var l_Token = m_GetLevelEntitlementStatusTokenSource.Token;
-                return await m_BeatmapLevelsModel._entitlements.GetLevelEntitlementStatusAsync(p_LevelID, l_Token) == EntitlementStatus.Owned;
-            }
-            else
-                CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][Level.OwnDLCLevelByLevelID] Invalid AdditionalContentModel");
+                if (m_BeatmapLevelsModel?._entitlements == null)
+                {
+                    CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][Level.OwnDLCLevelByLevelID] Invalid AdditionalContentModel");
+                    return null;
+                }
+                return m_BeatmapLevelsModel._entitlements.GetLevelEntitlementStatusAsync(p_LevelID, p_Token);
+            }).ConfigureAwait(false);
 
-            return false;
+            return l_Task != null && await l_Task.ConfigureAwait(false) == EntitlementStatus.Owned;
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -489,32 +492,39 @@ namespace CP_SDK_BS.Game
         /// <param name="p_Callback">Callback</param>
         public static void TryLoadBeatmapLevelCoverAsync(BeatmapLevel p_BeatmapLevel, Action<bool, Sprite> p_Callback)
         {
-            if (p_BeatmapLevel == null || p_BeatmapLevel.previewMediaData == null)
+            CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() =>
             {
-                CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() => p_Callback?.Invoke(false, GetDefaultPackCover()));
-                return;
-            }
-
-            var l_CoverTask = null as Task<Sprite>;
-            try
-            {
-                l_CoverTask = p_BeatmapLevel.previewMediaData.GetCoverSpriteAsync();
-                l_CoverTask.ContinueWith((x) =>
+                if (p_BeatmapLevel?.previewMediaData == null)
                 {
-                    if (x != null && x.IsCompleted && x.Result)
-                        CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() => p_Callback?.Invoke(x.Result, x.Result));
-                    else
-                        CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() => p_Callback?.Invoke(false, GetDefaultPackCover()));
-                });
-            }
-            catch (Exception l_Exception)
-            {
-                CP_SDK.ChatPlexSDK.Logger.Error($"[CP_SDK_BS.Game][Level.TryLoadBeatmapLevelCoverAsync] Error:");
-                CP_SDK.ChatPlexSDK.Logger.Error(l_Exception);
+                    p_Callback?.Invoke(false, GetDefaultPackCover());
+                    return;
+                }
 
-                CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() => p_Callback?.Invoke(false, GetDefaultPackCover()));
-                return;
-            }
+                try
+                {
+                    var l_Task = p_BeatmapLevel.previewMediaData.GetCoverSpriteAsync();
+                    l_Task.ContinueWith(result =>
+                    {
+                        var l_Error = result.Exception;
+                        CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() =>
+                        {
+                            if (l_Error != null)
+                                CP_SDK.ChatPlexSDK.Logger.Error(l_Error);
+                            var l_Cover = result.Status == TaskStatus.RanToCompletion ? result.Result : null;
+                            if (l_Cover)
+                                p_Callback?.Invoke(true, l_Cover);
+                            else
+                                p_Callback?.Invoke(false, GetDefaultPackCover());
+                        });
+                    }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+                }
+                catch (Exception l_Exception)
+                {
+                    CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][Level.TryLoadBeatmapLevelCoverAsync] Error:");
+                    CP_SDK.ChatPlexSDK.Logger.Error(l_Exception);
+                    p_Callback?.Invoke(false, GetDefaultPackCover());
+                }
+            });
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -525,31 +535,45 @@ namespace CP_SDK_BS.Game
         /// </summary>
         /// <param name="p_LevelID">ID of the level</param>
         /// <param name="p_LoadCallback">Load callback</param>
-        public static async Task LoadBeatmapLevelDataByLevelID(string p_LevelID, Action<BeatmapLevel, IBeatmapLevelData> p_LoadCallback)
+        public static Task LoadBeatmapLevelDataByLevelID(string p_LevelID, Action<BeatmapLevel, IBeatmapLevelData> p_LoadCallback)
+        {
+            return LoadBeatmapLevelDataByLevelID(p_LevelID, p_LoadCallback, CancellationToken.None);
+        }
+
+        public static async Task LoadBeatmapLevelDataByLevelID(string p_LevelID, Action<BeatmapLevel, IBeatmapLevelData> p_LoadCallback, CancellationToken p_Token)
         {
             await Task.Yield();
-
-            var l_LevelID = SanitizeLevelID(p_LevelID);
-            if (!TryGetBeatmapLevelForLevelID(l_LevelID, out var l_BeatmapLevel, silentFail: true))
+            BeatmapLevel l_Level = null;
+            IBeatmapLevelData l_Data = null;
+            try
             {
-                p_LoadCallback(null, null);
-                return;
-            }
-
-            if (!LevelID_IsCustom(p_LevelID))
-            {
-                if (!await OwnDLCLevelByLevelID(p_LevelID).ConfigureAwait(false))
+                var l_LevelID = SanitizeLevelID(p_LevelID);
+                l_Level = await RunOnOwnerAsync(() =>
                 {
-                    p_LoadCallback(null, null);
-                    return; /// In the case of unowned DLC, just bail out and do nothing
+                    p_Token.ThrowIfCancellationRequested();
+                    return TryGetBeatmapLevelForLevelID(l_LevelID, out var level, silentFail: true) ? level : null;
+                }).ConfigureAwait(false);
+
+                if (l_Level != null && await OwnDLCLevelByLevelID(p_LevelID, p_Token).ConfigureAwait(false))
+                {
+                    var l_Result = await LoadIBeatmapLevelDataAsync(p_LevelID, p_Token).ConfigureAwait(false);
+                    if (l_Result != null && !l_Result.Value.isError)
+                        l_Data = l_Result.Value.beatmapLevelData;
                 }
+                p_Token.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException)
+            {
+                l_Data = null;
+            }
+            catch (Exception l_Exception)
+            {
+                CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][Level.LoadBeatmapLevelDataByLevelID] Error:");
+                CP_SDK.ChatPlexSDK.Logger.Error(l_Exception);
+                throw;
             }
 
-            var l_Result = await LoadIBeatmapLevelDataAsync(p_LevelID).ConfigureAwait(false);
-            if (l_Result != null && !(l_Result?.isError == true))
-                p_LoadCallback(l_BeatmapLevel, l_Result.Value.beatmapLevelData);
-            else
-                p_LoadCallback(null, null);
+            await RunOnOwnerAsync(() => p_LoadCallback?.Invoke(l_Data != null ? l_Level : null, l_Data)).ConfigureAwait(false);
         }
         /// <summary>
         /// Start a BeatmapLevel
@@ -634,43 +658,58 @@ namespace CP_SDK_BS.Game
         /// </summary>
         /// <param name="p_LevelID">Level ID</param>
         /// <returns>LoadBeatmapLevelDataResult?</returns>
-        private static async Task<LoadBeatmapLevelDataResult?> LoadIBeatmapLevelDataAsync(string p_LevelID)
+        private static Task<LoadBeatmapLevelDataResult?> LoadIBeatmapLevelDataAsync(string p_LevelID)
         {
-            if (m_BeatmapLevelsModel == null)
-                m_BeatmapLevelsModel = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault(x => x._beatmapLevelsModel != null)?._beatmapLevelsModel;
+            return LoadIBeatmapLevelDataAsync(p_LevelID, CancellationToken.None);
+        }
 
-            if (m_MenuTransitionsHelper == null)
-                m_MenuTransitionsHelper = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault()?._menuTransitionsHelper;
-
-            if (m_BeatmapLevelsModel != null)
+        private static async Task<LoadBeatmapLevelDataResult?> LoadIBeatmapLevelDataAsync(string p_LevelID, CancellationToken p_Token)
+        {
+            BeatmapLevelsModel l_Model = null;
+            var l_VersionTask = await RunOnOwnerAsync(() =>
             {
-                m_GetLevelCancellationTokenSource?.Cancel();
-                m_GetLevelCancellationTokenSource = new CancellationTokenSource();
+                p_Token.ThrowIfCancellationRequested();
+                if (m_BeatmapLevelsModel == null)
+                    m_BeatmapLevelsModel = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault(x => x._beatmapLevelsModel != null)?._beatmapLevelsModel;
+                if (m_MenuTransitionsHelper == null)
+                    m_MenuTransitionsHelper = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().FirstOrDefault()?._menuTransitionsHelper;
 
-                var l_Token = m_GetLevelCancellationTokenSource.Token;
-
-                LoadBeatmapLevelDataResult? l_Result = null;
-                try
+                l_Model = m_BeatmapLevelsModel;
+                if (l_Model == null || m_MenuTransitionsHelper?._beatmapLevelsEntitlementModel == null)
                 {
-                    var l_BeatmapLevelDataVersion = await m_MenuTransitionsHelper._beatmapLevelsEntitlementModel.GetLevelDataVersionAsync(p_LevelID, l_Token);
-                    l_Token.ThrowIfCancellationRequested();
-                    l_Result = await m_BeatmapLevelsModel.LoadBeatmapLevelDataAsync(p_LevelID, l_BeatmapLevelDataVersion, l_Token).ConfigureAwait(false);
+                    CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][Level.LoadIBeatmapLevelDataAsync] Invalid BeatmapLevelsModel");
+                    return null;
                 }
-                catch (OperationCanceledException l_Exception)
-                {
-                    CP_SDK.ChatPlexSDK.Logger.Error($"[CP_SDK_BS.Game][Level.LoadIBeatmapLevelDataAsync] Error:");
-                    CP_SDK.ChatPlexSDK.Logger.Error(l_Exception);
-                }
+                return m_MenuTransitionsHelper._beatmapLevelsEntitlementModel.GetLevelDataVersionAsync(p_LevelID, p_Token);
+            }).ConfigureAwait(false);
+            if (l_VersionTask == null)
+                return null;
 
-                if (l_Result?.isError == true || l_Result?.beatmapLevelData == null)
-                    return null; /// Null out entirely in case of error
+            var l_Version = await l_VersionTask.ConfigureAwait(false);
+            var l_LoadTask = await RunOnOwnerAsync(() =>
+            {
+                p_Token.ThrowIfCancellationRequested();
+                return l_Model.LoadBeatmapLevelDataAsync(p_LevelID, l_Version, p_Token);
+            }).ConfigureAwait(false);
+            var l_Result = await l_LoadTask.ConfigureAwait(false);
+            p_Token.ThrowIfCancellationRequested();
+            return l_Result.isError || l_Result.beatmapLevelData == null ? (LoadBeatmapLevelDataResult?)null : l_Result;
+        }
 
-                return l_Result;
-            }
-            else
-                CP_SDK.ChatPlexSDK.Logger.Error("[CP_SDK_BS.Game][Level.LoadIBeatmapLevelDataAsync] Invalid BeatmapLevelsModel");
+        internal static Task<T> RunOnOwnerAsync<T>(Func<T> p_Action)
+        {
+            var l_Completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            CP_SDK.Unity.MTMainThreadInvoker.Enqueue(() =>
+            {
+                try { l_Completion.TrySetResult(p_Action()); }
+                catch (Exception l_Exception) { l_Completion.TrySetException(l_Exception); }
+            });
+            return l_Completion.Task;
+        }
 
-            return null;
+        internal static Task RunOnOwnerAsync(Action p_Action)
+        {
+            return RunOnOwnerAsync<object>(() => { p_Action(); return null; });
         }
 
         ////////////////////////////////////////////////////////////////////////////
