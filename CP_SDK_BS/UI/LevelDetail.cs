@@ -473,7 +473,11 @@ namespace CP_SDK_BS.UI
 
             /// Display modes
             var l_Characteristics = new List<HMUI.IconSegmentedControl.DataItem>();
+#if BEAT_SABER_1453
+            foreach (var l_Current in p_BeatMap.GetCharacteristics(GameplayType.BeatSaber).Distinct())
+#else
             foreach (var l_Current in p_BeatMap.GetCharacteristics().Distinct())
+#endif
             {
                 l_Characteristics.Add(new HMUI.IconSegmentedControl.DataItem(
                     Game.Levels.GetBeatmapCharacteristicIcon(l_Current),
@@ -773,7 +777,11 @@ namespace CP_SDK_BS.UI
         {
             if (m_LocalBeatMap != null)
             {
+#if BEAT_SABER_1453
+                var characs = m_LocalBeatMap.GetCharacteristics(GameplayType.BeatSaber).Distinct();
+#else
                 var characs = m_LocalBeatMap.GetCharacteristics().Distinct();
+#endif
 
                 if (index > characs.Count())
                     return;
@@ -826,7 +834,11 @@ namespace CP_SDK_BS.UI
         {
             if (m_LocalBeatMap != null)
             {
+#if BEAT_SABER_1453
+                var l_Characs = m_LocalBeatMap.GetCharacteristics(GameplayType.BeatSaber).Distinct();
+#else
                 var l_Characs = m_LocalBeatMap.GetCharacteristics().Distinct();
+#endif
 
                 if (m_SongCharacteristicSegmentedControl.selectedCellNumber > l_Characs.Count())
                     return;
@@ -853,7 +865,11 @@ namespace CP_SDK_BS.UI
                 }
 
                 var l_BeatmapKey        = l_Difficulties.ElementAt(p_Index);
+#if BEAT_SABER_1453
+                var l_DifficultyBeatmap = m_LocalBeatMap.GetDifficultyBeatmapData(in l_BeatmapKey);
+#else
                 var l_DifficultyBeatmap = m_LocalBeatMap.GetDifficultyBeatmapData(l_BeatmapKey.characteristic, l_BeatmapKey.difficulty);
+#endif
 
                 Time            = m_LocalBeatMap.songDuration;
                 NPS             = ((float)l_DifficultyBeatmap.notesCount / (float)m_LocalBeatMap.songDuration);
@@ -925,7 +941,13 @@ namespace CP_SDK_BS.UI
                 Bombs       = l_SelectedBeatmapCharacteristicDifficulty.bombs;
 
                 if (OnActiveDifficultyChanged != null && Game.Levels.TryGetLevelIDFromHash(l_Version.hash, out var l_LevelID))
+                {
+#if BEAT_SABER_1453
+                    OnActiveDifficultyChanged.Invoke(new BeatmapKey(l_LevelID, GameplayType.BeatSaber, SelectedBeatmapCharacteristicSO.AsEnum(), SelectedBeatmapDifficulty));
+#else
                     OnActiveDifficultyChanged.Invoke(new BeatmapKey(l_LevelID, SelectedBeatmapCharacteristicSO.AsEnum(), SelectedBeatmapDifficulty));
+#endif
+                }
             }
         }
         /// <summary>
