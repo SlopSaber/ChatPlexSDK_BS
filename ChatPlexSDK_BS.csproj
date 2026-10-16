@@ -307,4 +307,11 @@
     
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
   <Import Project="BSIPA.Layout.targets" Condition="Exists('$(GameDirectory)\IPA\Data\Managed\IPA.Loader.dll') OR Exists('$(BeatSaberDir)\IPA\Data\Managed\IPA.Loader.dll')" />
+  <Target Name="CopyNativeCodecs" BeforeTargets="BSMT_SetOutputs" DependsOnTargets="BSMT_AfterBuild" Condition="'$(PluginFolderName)' == 'Mods'">
+    <ItemGroup>
+      <OutputCopy Include="$(OutputAssemblyName).dll" OutputPath="Mods\$(AssemblyName).dll" />
+      <OutputCopy Include="$(MSBuildProjectDirectory)\CP_SDK\_Resources\libwebp.dll" OutputPath="Mods\Libraries\Native\libwebp.dll" />
+      <OutputCopy Include="$(MSBuildProjectDirectory)\CP_SDK\_Resources\libwebpdemux.dll" OutputPath="Mods\Libraries\Native\libwebpdemux.dll" />
+    </ItemGroup>
+  </Target>
 </Project>
