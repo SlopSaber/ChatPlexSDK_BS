@@ -7,6 +7,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using static PlayerSaveData;
+#if BEAT_SABER_1453
+using LevelColorOverrideType = global::ColorOverrideType;
+#else
+using LevelColorOverrideType = ColorSchemesSettings.ColorOverrideType;
+#endif
 
 namespace CP_SDK_BS.Game
 {
@@ -411,7 +416,11 @@ namespace CP_SDK_BS.Game
             if (p_BeatmapLevel == null)
                 return false;
 
+#if BEAT_SABER_1453
+            return p_BeatmapLevel.GetBeatmapKeys().Any(key => key.characteristic == p_BeatmapCharacteristic && key.difficulty == p_BeatmapDifficulty);
+#else
             return p_BeatmapLevel.GetDifficultyBeatmapData(p_BeatmapCharacteristic, p_BeatmapDifficulty) != null;
+#endif
         }
         /// <summary>
         /// Try get a beatmap key from a BeatmapLevel
@@ -571,7 +580,7 @@ namespace CP_SDK_BS.Game
                                              IBeatmapLevelData                       beatmapLevelData,
                                              OverrideEnvironmentSettings             overrideEnvironmentSettings                                   = null,
                                              ColorScheme                             colorScheme                                                   = null,
-                                             ColorSchemesSettings.ColorOverrideType? colorOverrideType                                             = null,
+                                             LevelColorOverrideType?                 colorOverrideType                                             = null,
                                              GameplayModifiers                       gameplayModifiers                                             = null,
                                              PlayerSpecificSettings                  playerSettings                                                = null,
                                              Action<StandardLevelScenesTransitionSetupDataSO, LevelCompletionResults> songFinishedCallback = null,
@@ -598,12 +607,16 @@ namespace CP_SDK_BS.Game
                     );
 
                     m_MenuTransitionsHelper.StartStandardLevel(
+#if BEAT_SABER_1453
+                        gameMode:                               global::GameMode.Solo,
+#else
                         gameMode:                               "Solo",
+#endif
                         beatmapKey:                             in l_BeatmapKey,
                         beatmapLevel:                           level,
                         overrideEnvironmentSettings:            overrideEnvironmentSettings,
                         playerOverrideColorScheme:              colorScheme,
-                        playerOverrideLightshowColors:          colorOverrideType == ColorSchemesSettings.ColorOverrideType.All ? true : false,
+                        playerOverrideLightshowColors:          colorOverrideType == LevelColorOverrideType.All ? true : false,
                         gameplayModifiers:                      gameplayModifiers ?? new GameplayModifiers(),
                         playerSpecificSettings:                 playerSettings ?? new PlayerSpecificSettings(),
                         practiceSettings:                       null,
