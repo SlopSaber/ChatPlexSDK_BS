@@ -29,6 +29,7 @@ namespace ChatPlexSDK_BS
         ////////////////////////////////////////////////////////////////////////////
 
         private static Harmony              m_Harmony;
+        private static readonly List<Material> m_PendingFontMaterials = new List<Material>();
         private static BasicUIAudioManager  m_BasicUIAudioManager = null;
         private static Material             m_UINoGlowMaterial;
         private static VRGraphicRaycaster   m_VRGraphicRaycasterCache;
@@ -67,14 +68,8 @@ namespace ChatPlexSDK_BS
 
             CP_SDK.Unity.FontManager.Setup(p_TMPFontAssetSetup: (p_Input) =>
             {
-                var l_MainFont = Resources.FindObjectsOfTypeAll<TMP_FontAsset>().FirstOrDefault(t => t.name == "Teko-Medium SDF");
-                if (l_MainFont && p_Input)
-                {
-                    p_Input.material.shader = l_MainFont.material.shader;
-                    p_Input.material.SetColor("_FaceColor", p_Input.material.GetColor("_FaceColor"));
-                    p_Input.material.EnableKeyword("CURVED");
-                    p_Input.material.EnableKeyword("UNITY_UI_CLIP_RECT");
-                }
+                if (p_Input && !ApplyGameFontShader(p_Input.material))
+                    QueueGameFontShader(p_Input.material);
 
                 return p_Input;
             });
@@ -91,6 +86,51 @@ namespace ChatPlexSDK_BS
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
 
+
+        /// <summary>
+        /// Use the game's curved, zero-alpha text shader for an SDK font material
+        /// </summary>
+        /// <param name="p_Material">Font material</param>
+        /// <returns>False while the game font is not loaded yet</returns>
+        private static bool ApplyGameFontShader(Material p_Material)
+        {
+            var l_MainFont = Resources.FindObjectsOfTypeAll<TMP_FontAsset>().FirstOrDefault(t => t.name == "Teko-Medium SDF");
+            if (!l_MainFont || !l_MainFont.material)
+                return false;
+
+            p_Material.shader = l_MainFont.material.shader;
+            p_Material.SetColor("_FaceColor", p_Material.GetColor("_FaceColor"));
+            p_Material.EnableKeyword("CURVED");
+            p_Material.EnableKeyword("UNITY_UI_CLIP_RECT");
+            return true;
+        }
+        /// <summary>
+        /// SDK fonts can be created before the game font loads; finish their materials once it does
+        /// </summary>
+        /// <param name="p_Material">Font material</param>
+        private static void QueueGameFontShader(Material p_Material)
+        {
+            if (m_PendingFontMaterials.Count == 0)
+                UnityEngine.SceneManagement.SceneManager.sceneLoaded += ApplyPendingGameFontShaders;
+
+            m_PendingFontMaterials.Add(p_Material);
+        }
+        private static void ApplyPendingGameFontShaders(UnityEngine.SceneManagement.Scene p_Scene, UnityEngine.SceneManagement.LoadSceneMode p_Mode)
+        {
+            m_PendingFontMaterials.RemoveAll(x => !x);
+            if (m_PendingFontMaterials.Count > 0 && !ApplyGameFontShader(m_PendingFontMaterials[0]))
+                return;
+
+            for (var l_I = 1; l_I < m_PendingFontMaterials.Count; ++l_I)
+                ApplyGameFontShader(m_PendingFontMaterials[l_I]);
+
+            m_PendingFontMaterials.Clear();
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= ApplyPendingGameFontShaders;
+            CP_SDK.ChatPlexSDK.Logger.Debug("[ChatPlexSDK_BS][Plugin] Applied the game text shader to fonts created before it loaded");
+        }
+
+        ////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////
 
         [OnStart]
         public void OnApplicationStart()
